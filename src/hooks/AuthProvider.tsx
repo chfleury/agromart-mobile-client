@@ -5,10 +5,13 @@ import React, {
   useContext,
   useEffect,
 } from 'react';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Device from 'expo-device';
 
-import api from '../services/api';
+import initializeApi from '../services/api';
 import { Address } from '../interfaces';
+import axios from 'axios';
 
 interface User {
   id: string;
@@ -45,7 +48,7 @@ interface AuthContextData {
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
-const AuthProvider: React.FC = ({ children }) => {
+const AuthProvider: React.FC = ({ children }: any) => {
   const [data, setData] = useState<AuthState>({} as AuthState);
   const [loading, setLoading] = useState(true);
 
@@ -57,8 +60,6 @@ const AuthProvider: React.FC = ({ children }) => {
       ]);
 
       if (token[1] && user[1]) {
-        api.defaults.headers.authorization = `Bearer ${token[1]}`;
-
         setData({ token: token[1], user: JSON.parse(user[1]) });
       }
 
@@ -95,14 +96,16 @@ const AuthProvider: React.FC = ({ children }) => {
 
   const signIn = useCallback(
     async ({ username, password }: SignInCredentials) => {
-      const response = await api.post('auth/local', {
+      const url = await AsyncStorage.getItem('@BaseUrlChosen');
+      console.log('LOGANDO DENTRO', url);
+      const response = await axios.post(`${url}auth/local`, {
         identifier: username,
         password,
       });
 
       const { jwt: token, user } = response.data;
 
-      api.defaults.headers.authorization = `Bearer ${token}`;
+      console.log('TOKEN', token);
 
       await AsyncStorage.multiSet([
         ['@Agromart:token', token],
@@ -110,13 +113,20 @@ const AuthProvider: React.FC = ({ children }) => {
       ]);
 
       setData({ token, user });
+
+      await registerDeviceInfo(user.id);
     },
     [],
   );
 
   const signUp = useCallback(
     async ({ username, password, email }: SignUpCredentials) => {
-      const response = await api.post('auth/local/register', {
+      // TODO REMOVE THIS HARD CODED URL THIS IS JUST FOR TESTING
+      const baseUrl =
+        (await AsyncStorage.getItem('@BaseUrlChosen')) ||
+        'https://agromarttcc.shop/api/';
+
+      const response = await axios.post(`${baseUrl}auth/local/register`, {
         username,
         password,
         email,
@@ -124,25 +134,57 @@ const AuthProvider: React.FC = ({ children }) => {
 
       const { jwt: token, user } = response.data;
 
-      api.defaults.headers.authorization = `Bearer ${token}`;
-
       await AsyncStorage.multiSet([
         ['@Agromart:token', token],
         ['@Agromart:user', JSON.stringify(user)],
       ]);
 
       setData({ token, user });
+
+      await registerDeviceInfo(user.id);
     },
     [],
   );
 
   const signOut = useCallback(async () => {
+    const api = await initializeApi();
+
     await AsyncStorage.multiRemove(['@Agromart:user', '@Agromart:token']);
 
     delete api.defaults.headers.authorization;
 
     setData({} as AuthState);
   }, []);
+
+  const registerDeviceInfo = async (userId: number) => {
+    const pushToken = await AsyncStorage.getItem('@Agromart:push_token');
+    const api = await initializeApi();
+
+    const body = {
+      platform: Platform.OS,
+      model: Device.modelName,
+      platform_version: Device.osVersion,
+      // expo_push_token: pushToken,
+      expo_push_token: 'pushTokenTeste123',
+      user_id: userId,
+    };
+
+    console.log('registerDeviceInfo - body =======> ', body);
+
+    try {
+      const userHasDeviceRes = await api.get(`devices/user/${userId}`);
+      if (userHasDeviceRes.data.status === 200) {
+        const deviceId = userHasDeviceRes.data.device_id;
+
+        return await api.put(`devices/${deviceId}`, body);
+      }
+
+      return await api.post('devices', body);
+    } catch (err: any) {
+      console.log('Erro ao enviar informações do device', err.message);
+      console.log('ERRO ========> ', err);
+    }
+  };
 
   return (
     <AuthContext.Provider

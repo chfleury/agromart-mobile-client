@@ -5,6 +5,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useCart, TypeItem } from '../../hooks/CartProvider';
+import { useAuth } from '../../hooks/AuthProvider';
 
 import BackHeader from '../../components/BackHeader';
 import ProductCard from '../../components/ProductCard';
@@ -53,7 +54,7 @@ type ParamList = {
     banner: {
       url: string;
     };
-    produtos_avulsos: any[];
+    produto_avulsos: any[];
     cestas: any[];
     planos: any[];
     endereco: {
@@ -69,7 +70,9 @@ const StoreDetails: React.FC = () => {
   const navigation = useNavigation();
 
   const [data, setData] = useState<Category[]>([]);
+  console.log({ data });
   const { addItemToCart, cart } = useCart();
+  const { user } = useAuth();
 
   const {
     params: {
@@ -78,7 +81,7 @@ const StoreDetails: React.FC = () => {
       contato,
       descricao,
       banner,
-      produtos_avulsos,
+      produto_avulsos,
       cestas,
       planos,
       endereco,
@@ -94,7 +97,7 @@ const StoreDetails: React.FC = () => {
           id: item.id,
           name: `Cesta ${item.id}`,
           type: 'cesta',
-          image: item.imagem ? item.imagem.url : '',
+          image: item.url ?? '',
           quantity: item.quantidade,
           value: item.valor,
           unity: 'unidade',
@@ -109,7 +112,7 @@ const StoreDetails: React.FC = () => {
           id: item.id,
           type: 'plano',
           name: item.nome,
-          image: item.imagem ? item.imagem.url : '',
+          image: item.url ?? '',
           quantity: item.quantidade,
           value: item.valor,
           unity: 'unidade',
@@ -120,11 +123,11 @@ const StoreDetails: React.FC = () => {
       {
         id: 3,
         title: 'Produtos',
-        data: produtos_avulsos.map(item => ({
+        data: produto_avulsos.map(item => ({
           id: item.id,
           type: 'produto',
           name: item.nome,
-          image: item.imagem ? item.imagem.url : '',
+          image: item.url ?? '',
           quantity: item.quantidade,
           value: item.valor,
           unity: item.unidade_medida,
@@ -133,7 +136,7 @@ const StoreDetails: React.FC = () => {
         })),
       },
     ]);
-  }, [cestas, planos, produtos_avulsos, id]);
+  }, [cestas, planos, produto_avulsos, id]);
 
   const handleWhatsAppMessage = useCallback(
     async (phoneNumber: string): Promise<void> => {
@@ -196,6 +199,12 @@ const StoreDetails: React.FC = () => {
               <IconView
                 onPress={() => {
                   if (!cart.length) {
+                    if (!user) {
+                      return Alert.alert(
+                        'Ops...',
+                        'Você deve estar logado para acessar o carrinho.',
+                      );
+                    }
                     return Alert.alert('Ops...', 'Seu carrinho está vazio');
                   }
                   return navigation.navigate('Cart');
@@ -257,6 +266,12 @@ const StoreDetails: React.FC = () => {
                 if (item.type !== 'plano') {
                   navigation.navigate('ProductPage', item);
                 } else {
+                  if (!user) {
+                    return Alert.alert(
+                      'Ops...',
+                      'Você deve estar logado para adicionar um plano ao carrinho.',
+                    );
+                  }
                   const plan = {
                     id: item.id,
                     name: item.name,
